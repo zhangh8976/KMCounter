@@ -270,10 +270,24 @@ TestDashboard() {
     rectangles.Push({x:rectX,y:rectY,w:rectW,h:rectH,key:key})
   }
   AssertTrue(KeyHandles.Count() >= 100, "Complete keyboard")
-  for i, name in ["StatsLine", "ClickStat", "RightClickStat", "DistanceStat", "StatCaption1", "StatCaption2", "StatCaption3", "StatCaption4"] {
+  GuiControlGet, panel, 1:Pos, %StatsPanelHandle%
+  GuiControlGet, functionKey, 1:Pos, % KeyHandles["sc1"]
+  AssertEq(panelW "/" panelH, "256/32", "Compact panel keeps its width and height")
+  keycapRight := 0
+  for i, other in rectangles
+    keycapRight := Max(keycapRight,other.x+other.w-2)
+  AssertEq(panelX+panelW,keycapRight,"Panel right edge aligns with rightmost keycaps")
+  GuiControlGet, legend, 1:Pos, % LegendHandles[80]
+  AssertEq(legendX+legendW,keycapRight,"Legend right edge aligns with rightmost keycaps")
+  GuiControlGet, legendLabel, 1:Pos, QuickStats
+  AssertEq(legendLabelX+legendLabelW,keycapRight,"Legend label right edge aligns with rightmost keycaps")
+  AssertEq(panelY+panelH,functionKeyY+functionKeyH-2,"Panel aligns with function keycap bottom")
+  for i, other in rectangles
+    AssertTrue(panelX >= other.x+other.w || panelX+panelW <= other.x || panelY >= other.y+other.h || panelY+panelH <= other.y,"Aligned panel does not overlap key " other.key)
+  for i, name in ["StatsLine", "ClickStat", "RightClickStat", "DistanceStat", "StatIcon1", "StatIcon2", "StatIcon3", "StatIcon4"] {
     GuiControlGet, stat, 1:Pos, %name%
-    AssertTrue(statW > 0 && statH > 0 && statX >= DashboardWidth-260 && statX+statW <= DashboardWidth-12, "Statistics stay inside legend width: " name)
-    AssertTrue(statY >= 36 && statY+statH <= 88, "Statistics leave space before keyboard: " name)
+    AssertTrue(statW > 0 && statH > 0 && statX >= panelX+8 && statX+statW <= panelX+panelW-8, "Statistics stay inside panel padding: " name)
+    AssertTrue(statY >= panelY && statY+statH <= panelY+panelH, "Statistics stay inside compact panel: " name)
   }
   savedMouse := mouse[today].Clone()
   savedRange := SelectedRange
@@ -287,6 +301,36 @@ TestDashboard() {
   AssertEq(rightCount, "7", "Right clicks remain independent")
   mouse[today] := savedMouse, SelectedRange := savedRange
   RefreshDashboard()
+  AssertEq(CompactStatCount(12345), "12.3k", "Compact count retains one decimal")
+  AssertEq(CompactStatCount(12000), "12k", "Compact count omits empty decimal")
+  savedTotalKeyboard := keyboard.total.Clone(), savedTotalMouse := mouse.total.Clone()
+  referenceDigitWidth := MeasureStatText(StatsPanelTexts[1].handle, "8888")
+  for caseIndex, value in [0, 999, 1000, 9999, 12345, 1234567, 99999999, 999999999999] {
+    keyboard.total.keystrokes := value
+    mouse.total.lbcount := value, mouse.total.rbcount := value, mouse.total.move := value+0.4
+    SelectedRange := 5
+    RefreshDashboard()
+    previousRight := panelX+8, hasK := false
+    for i, item in StatsPanelTexts {
+      GuiControlGet, icon, 1:Pos, % StatsIconHandles[i]
+      GuiControlGet, stat, 1:Pos, % item.handle
+      GuiControlGet, label, 1:, % item.handle
+      AssertEq(MeasureStatText(item.handle,"8888"),referenceDigitWidth,"All metrics and ranges retain the same font size")
+      AssertTrue(iconX >= previousRight && statX >= iconX+iconW+3, "History metrics do not overlap " caseIndex "/" i)
+      AssertTrue(statX+statW <= panelX+panelW-8, "History metric fits panel " caseIndex "/" i)
+      AssertTrue(MeasureStatText(item.handle,label) <= statW-2, "History text is not clipped " caseIndex "/" i)
+      previousRight := statX+statW
+      hasK := hasK || InStr(label,"k")
+      if (i=4)
+        AssertTrue(SubStr(label,-1)=" m", "Distance always retains metre unit")
+    }
+    if (value>=12345)
+      AssertTrue(hasK, "Large history totals use k")
+    AssertTrue(InStr(StatsDetailText,FormatCount(value)), "Tooltip keeps exact history total")
+    AssertEq(keyboard.total.keystrokes,value,"Abbreviation never alters stored total")
+  }
+  keyboard.total := savedTotalKeyboard, mouse.total := savedTotalMouse, SelectedRange := savedRange
+  RefreshDashboard()
   oldTheme := ThemeIndex, oldPalette := PaletteIndex, oldRange := SelectedRange
   GuiControl, 2:, dsd, 123
   SetDashboardLanguage("en")
@@ -294,10 +338,7 @@ TestDashboard() {
   AssertEq(translated, "All time", "Range switches to English")
   GuiControlGet, translated, 1:, SettingsButton
   AssertEq(translated, "Settings", "Gear accessibility switches to English")
-  GuiControlGet, translated, 1:, StatCaption2
-  AssertEq(translated, "Left", "Left click label switches to English")
-  GuiControlGet, translated, 1:, StatCaption3
-  AssertEq(translated, "Right", "Right click label switches to English")
+  AssertTrue(InStr(StatsDetailText, "Keystrokes ") && InStr(StatsDetailText, "Left ") && InStr(StatsDetailText, "Right ") && InStr(StatsDetailText, "Distance "), "Icon tooltip switches to English")
   GuiControlGet, translated, 2:, SaveButton
   AssertEq(translated, "Save", "Settings switches to English")
   GuiControlGet, editedDays, 2:, dsd

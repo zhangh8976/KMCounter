@@ -27,8 +27,6 @@ ApplyLanguageLabels() {
   for i, label in [Tr("今日", "Today"), Tr("本周", "Week"), Tr("本月", "Month"), Tr("今年", "Year"), Tr("历史总计", "All time")]
     GuiControl, 1:, % "Range" i, %label%
   GuiControl, 1:, SettingsButton, % Tr("设置", "Settings")
-  for i, label in [Tr("键击次数", "Keystrokes"), Tr("左键", "Left"), Tr("右键", "Right"), Tr("移动距离 · m", "Distance · m")]
-    GuiControl, 1:, % "StatCaption" i, %label%
   labels := {SettingsHeading:Tr("设置", "Settings"), RetentionLabel:Tr("主文件保留天数（更早明细按年归档）", "Active days (older data archived yearly)")
     , PaletteHeading:Tr("配色", "Color palette"), ThemeHeading:Tr("外观模式", "Appearance mode"), ThemeHint:Tr("点击预览立即应用，也可在托盘中切换", "Click a preview to apply. Also available in the tray.")
     , MonitorLabel:Tr("屏幕物理尺寸 / mm", "Display dimensions / mm"), WidthLabel:Tr("宽", "W"), HeightLabel:Tr("高", "H")

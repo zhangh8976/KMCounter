@@ -59,10 +59,12 @@ DrawKeycap(hdc, width, height, label, font, background, foreground, hover := fal
   DllCall("gdiplus\GdipSetPixelOffsetMode", "Ptr", graphics, "Int", 2)
   if (role = "settings")
     DrawSettingsGlyph(graphics, width, height, foreground, hover)
-  else if (role = "legend") {
+  else if (role = "legend" || SubStr(role, 1, 10) = "stat-icon-") {
     DllCall("gdiplus\GdipCreateSolidFill", "UInt", "0xFF" background, "Ptr*", fill)
     DllCall("gdiplus\GdipFillRectangle", "Ptr", graphics, "Ptr", fill, "Float", 0, "Float", 0, "Float", width, "Float", height)
     DllCall("gdiplus\GdipDeleteBrush", "Ptr", fill)
+    if (role != "legend")
+      DrawStatGlyph(graphics, SubStr(role, 11)+0, foreground)
   } else if (role != "label") {
     x := 2, y := 2, w := width-4, h := height-4, radius := Min(4, h/2)
     if (role = "panel")
@@ -92,7 +94,7 @@ DrawKeycap(hdc, width, height, label, font, background, foreground, hover := fal
     DllCall("gdiplus\GdipDeletePath", "Ptr", path)
   }
   DllCall("gdiplus\GdipDeleteGraphics", "Ptr", graphics)
-  if (role != "settings" && role != "legend") {
+  if (role != "settings" && role != "legend" && SubStr(role, 1, 10) != "stat-icon-") {
     DllCall("gdi32\SelectObject", "Ptr", hdc, "Ptr", font)
     NumPut(1, rect, 0, "Int"), NumPut(width-1, rect, 8, "Int"), NumPut(height-2, rect, 12, "Int")
     DllCall("gdi32\SetBkMode", "Ptr", hdc, "Int", 1)
@@ -100,6 +102,36 @@ DrawKeycap(hdc, width, height, label, font, background, foreground, hover := fal
     DllCall("DrawText", "Ptr", hdc, "Str", label, "Int", -1, "Ptr", &rect, "UInt", 0x825)
   }
   DllCall("RestoreDC", "Ptr", hdc, "Int", saved)
+}
+
+; Monochrome pictograms at native pixel size, with distinct filled mouse buttons.
+DrawStatGlyph(graphics, index, color) {
+  DllCall("gdiplus\GdipCreatePen1", "UInt", "0xFF" color, "Float", 1.1, "Int", 2, "Ptr*", pen)
+  DllCall("gdiplus\GdipCreateSolidFill", "UInt", "0xFF" color, "Ptr*", fill)
+  if (index=1) {
+    path := KeycapPath(0.7, 3, 12.6, 10, 1.5)
+    DllCall("gdiplus\GdipDrawPath", "Ptr", graphics, "Ptr", pen, "Ptr", path)
+    DllCall("gdiplus\GdipDeletePath", "Ptr", path)
+    for i, x in [3, 6.5, 10]
+      DllCall("gdiplus\GdipFillRectangle", "Ptr", graphics, "Ptr", fill, "Float", x, "Float", 5.5, "Float", 1.3, "Float", 1.3)
+    DllCall("gdiplus\GdipDrawLine", "Ptr", graphics, "Ptr", pen, "Float", 3, "Float", 10, "Float", 11, "Float", 10)
+  } else if (index=2 || index=3) {
+    path := KeycapPath(2.5, 0.8, 9, 14.3, 4.3)
+    DllCall("gdiplus\GdipSetClipPath", "Ptr", graphics, "Ptr", path, "Int", 0)
+    DllCall("gdiplus\GdipFillRectangle", "Ptr", graphics, "Ptr", fill, "Float", index=2 ? 2.5 : 7, "Float", 0.8, "Float", 4.5, "Float", 6)
+    DllCall("gdiplus\GdipResetClip", "Ptr", graphics)
+    DllCall("gdiplus\GdipDrawPath", "Ptr", graphics, "Ptr", pen, "Ptr", path)
+    DllCall("gdiplus\GdipDeletePath", "Ptr", path)
+    DllCall("gdiplus\GdipDrawLine", "Ptr", graphics, "Ptr", pen, "Float", 2.5, "Float", 6.8, "Float", 11.5, "Float", 6.8)
+    DllCall("gdiplus\GdipDrawLine", "Ptr", graphics, "Ptr", pen, "Float", 7, "Float", 1, "Float", 7, "Float", 6.8)
+  } else {
+    DllCall("gdiplus\GdipDrawLine", "Ptr", graphics, "Ptr", pen, "Float", 2, "Float", 12, "Float", 6, "Float", 6)
+    DllCall("gdiplus\GdipDrawLine", "Ptr", graphics, "Ptr", pen, "Float", 6, "Float", 6, "Float", 12, "Float", 4)
+    for i, point in [[0.5,10.5], [10.5,2.5]]
+      DllCall("gdiplus\GdipFillEllipse", "Ptr", graphics, "Ptr", fill, "Float", point[1], "Float", point[2], "Float", 3, "Float", 3)
+  }
+  DllCall("gdiplus\GdipDeletePen", "Ptr", pen)
+  DllCall("gdiplus\GdipDeleteBrush", "Ptr", fill)
 }
 
 KeycapPath(x, y, width, height, radius) {

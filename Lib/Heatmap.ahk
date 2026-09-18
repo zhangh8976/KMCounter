@@ -11,6 +11,7 @@ BuildDashboard() {
   Gui, 1:Font, % "s" 9 / (A_ScreenDPI/96), Segoe UI
   maxRight := 0, maxBottom := 0
   ; Resolve upstream relative keyboard geometry at its original scale.
+  keyboardRight := 0
   for i, ctl in ControlList {
     if (!RegExMatch(ctl.Hwnd, "^sc\d+$"))
       continue
@@ -39,8 +40,8 @@ BuildDashboard() {
   }
   ; Keep the compact width; add 40px of height for taller, less compressed keycaps.
   DashboardWidth := Max(820, Round((maxRight - 12) * UIScale) + 24)
-  DashboardHeight := Round((maxBottom - 12) * UIScale) + 108
-  keyboardBottom := DashboardHeight - 48
+  DashboardHeight := Round((maxBottom - 12) * UIScale) + 100
+  keyboardBottom := DashboardHeight - 40
   keyScaleY := (keyboardBottom - 68) / (maxBottom - 12)
   keyScaleX := (DashboardWidth - 40) / (maxRight - 12)
   for i, ctl in ControlList {
@@ -48,38 +49,43 @@ BuildDashboard() {
       continue
     rect := ctl.rect, handle := KeyHandles[ctl.Hwnd]
     GuiControl, 1:Move, %handle%, % "x" Round((rect.x-12)*keyScaleX+20) " y" Round((rect.y-12)*keyScaleY+68) " w" Round(rect.w*keyScaleX) " h" Round(rect.h*keyScaleY)
+    GuiControlGet, keyRect, 1:Pos, %handle%
+    keyboardRight := Max(keyboardRight, keyRectX+keyRectW-2)
     PaintTile(handle, "1C2B41", "A9BED2")
   }
   ; One quiet settings action, with the period selector centered between the gear and legend.
   Gui, 1:Font, % "s" 9 / (A_ScreenDPI/96) " norm", Microsoft YaHei UI
-  Gui, 1:Add, Button, x20 y12 w34 h34 +0xB gOpenSettings vSettingsButton hwndSettingsButtonHandle, 设置
+  Gui, 1:Add, Button, x20 y20 w34 h34 +0xB gOpenSettings vSettingsButton hwndSettingsButtonHandle, 设置
   InstallOwnerDrawButton(SettingsButtonHandle)
   selectorX := Floor((54 + (DashboardWidth-260) - 330)/2)
-  Gui, 1:Add, Text, % "x" selectorX " y12 w330 h34 +0xD hwndRangeTrackHandle",
+  Gui, 1:Add, Text, % "x" selectorX " y20 w330 h34 +0xD hwndRangeTrackHandle",
   for i, label in ["今日", "本周", "本月", "今年", "历史总计"] {
-    Gui, 1:Add, Text, % "x" selectorX+5+(i-1)*64 " y16 w64 h26 +0x10D gRangeClick vRange" i " hwndhandle", %label%
+    Gui, 1:Add, Text, % "x" selectorX+5+(i-1)*64 " y24 w64 h26 +0x10D gRangeClick vRange" i " hwndhandle", %label%
     RangeHandles.Push(handle)
   }
   Gui, 1:Font, % "s" 8 / (A_ScreenDPI/96), Microsoft YaHei UI
   ; Compact always-visible stats occupy the unused area above the navigation/numpad.
-  Gui, 1:Add, Text, % "x" DashboardWidth-260 " y12 w240 h13 c9CB6CA Right vQuickStats",
-  Gui, 1:Add, Text, % "x" DashboardWidth-268 " y44 w256 h50 +0xD hwndStatsPanelHandle",
-  StatsPanelTexts := []
-  statOffsets := [0,72,124,176], statWidths := [64,44,44,64]
+  ; Align the panel bottom with the visible Esc/function keycap bottom (2px inset).
+  GuiControlGet, functionKey, 1:Pos, % KeyHandles["sc1"]
+  StatsPanelY := functionKeyY+functionKeyH-2-32
+  StatsPanelX := keyboardRight-256
+  Gui, 1:Add, Text, % "x" StatsPanelX " y" StatsPanelY-32 " w256 h13 c9CB6CA Right vQuickStats",
+  Gui, 1:Add, Text, % "x" StatsPanelX " y" StatsPanelY " w256 h32 +0xD hwndStatsPanelHandle",
+  StatsPanelTexts := [], StatsIconHandles := []
   for i, name in ["StatsLine", "ClickStat", "RightClickStat", "DistanceStat"] {
-    statX := DashboardWidth-260+statOffsets[i], statWidth := statWidths[i]
-    Gui, 1:Font, % "s" 10.5 / (A_ScreenDPI/96) " norm", Segoe UI
-    Gui, 1:Add, Text, % "x" statX " y50 w" statWidth " h20 " (i=4 ? "Right " : (i>1 ? "Center " : "")) "v" name " hwndstatTextHandle",
+    statX := StatsPanelX+8+(i-1)*60
+    Gui, 1:Add, Text, % "x" statX " y" StatsPanelY+8 " w14 h16 +0x10D vStatIcon" i " hwndstatIconHandle",
+    StatsIconHandles.Push(statIconHandle)
+    Gui, 1:Font, % "s" 7.5 / (A_ScreenDPI/96) " norm", Segoe UI
+    Gui, 1:Add, Text, % "x" statX+18 " y" StatsPanelY+6 " w42 h20 +0x200 v" name " hwndstatTextHandle",
     StatsPanelTexts.Push({handle:statTextHandle, primary:true})
-    Gui, 1:Font, % "s" 8 / (A_ScreenDPI/96), Microsoft YaHei UI
-    Gui, 1:Add, Text, % "x" statX " y73 w" statWidth " h15 " (i=4 ? "Right " : (i>1 ? "Center " : "")) "vStatCaption" i " hwndstatTextHandle", % ["键击次数", "左键", "右键", "移动距离 · m"][i]
-    StatsPanelTexts.Push({handle:statTextHandle, primary:false})
   }
   Gui, 1:Font, % "s" 8 / (A_ScreenDPI/96), Microsoft YaHei UI
-  Gui, 1:Add, Text, % "x20 y" keyboardBottom+16 " w" DashboardWidth-40 " h14 c7E9CB4 vCoverageLine",
+  Gui, 1:Add, Text, % "x20 y" keyboardBottom+8 " w" DashboardWidth-40 " h14 c7E9CB4 vCoverageLine",
   LegendHandles := []
   Loop, 80 {
-    Gui, 1:Add, Text, % "x" DashboardWidth-260+(A_Index-1)*3 " y32 w3 h4 hwndhandle",
+    legendX := Round((A_Index-1)*256/80), legendWidth := Round(A_Index*256/80)-legendX
+    Gui, 1:Add, Text, % "x" StatsPanelX+legendX " y" StatsPanelY-12 " w" legendWidth " h4 hwndhandle",
     LegendHandles.Push(handle)
   }
   OnMessage(0x138, "TileColorMessage")
@@ -115,18 +121,16 @@ RefreshDashboard() {
   PaintTile(StatsPanelHandle, theme.panel, theme.text, true, "panel")
   for i, item in StatsPanelTexts
     PaintTile(item.handle, theme.panel, item.primary ? theme.text : theme.panelMuted, true, "stattext")
+  for i, handle in StatsIconHandles
+    PaintTile(handle, theme.panel, theme.text, true, "stat-icon-" i)
   PaintTile(SettingsButtonHandle, theme.surface, theme.muted, false, "settings")
   for i, handle in LegendHandles
     PaintTile(handle, HeatColor((i-1)/79, PaletteIndex, ThemeIndex), "FFFFFF")
   k := DisplayCounts.keyboard, m := DisplayCounts.mouse
   GuiControl, 1:, QuickStats, % Tr("低频                                     高频", "Low                                      High")
   MouseDetailText := Tr("左键 ", "Left ") FormatCount(m.lbcount) Tr(" · 右键 ", " · Right ") FormatCount(m.rbcount) Tr(" · 中键 ", " · Middle ") FormatCount(m.mbcount) Tr(" · 侧键 ", " · Side ") FormatCount(m.xbcount) Tr(" · 滚轮 ", " · Wheel ") FormatCount(m.wheel) Tr(" · 横滚 ", " · H wheel ") FormatCount(m.hwheel)
-  GuiControl, 1:, StatsLine, % FormatCount(k.keystrokes)
-  GuiControl, 1:, ClickStat, % FormatCount(m.lbcount)
-  GuiControl, 1:, RightClickStat, % FormatCount(m.rbcount)
-  GuiControl, 1:, DistanceStat, % Format("{:.1f}", m.move)
-
-  LayoutDashboardStats()
+  StatsDetailText := Tr("键击次数 ", "Keystrokes ") FormatCount(k.keystrokes) "`n" MouseDetailText "`n" Tr("移动距离 ", "Distance ") Format("{:.1f} m", m.move)
+  LayoutDashboardStats([k.keystrokes+0, m.lbcount+0, m.rbcount+0, m.move+0])
 
   if (SelectedRange = 5)
     coverage := Tr("历史总计 · 独立累计值，包含已归档日期", "All time · Includes archived dates")
@@ -143,30 +147,88 @@ RefreshDashboard() {
   GuiControl, 1:, CoverageLine, %coverage%
 }
 
-; Fit unusually large totals inside the four aligned columns above the numpad.
-LayoutDashboardStats() {
+; Measure the whole row so large totals can borrow space from shorter neighbors.
+; Abbreviations affect presentation only; the tooltip retains exact totals.
+LayoutDashboardStats(values) {
+  global StatsPanelTexts, StatsIconHandles, StatsPanelX
   theme := GetDashboardTheme()
-  for i, name in ["StatsLine", "ClickStat", "RightClickStat", "DistanceStat"] {
-    GuiControlGet, handle, 1:Hwnd, %name%
-    GuiControlGet, label, 1:, %name%
-    GuiControlGet, statRect, 1:Pos, %handle%
-    pointSize := 10.5
-    Loop {
-      Gui, 1:Font, % "s" pointSize / (A_ScreenDPI/96) " norm c" theme.text, Segoe UI
-      GuiControl, 1:Font, %name%
-      dc := DllCall("GetDC", "Ptr", handle, "Ptr")
-      font := DllCall("SendMessage", "Ptr", handle, "UInt", 0x31, "Ptr", 0, "Ptr", 0, "Ptr")
-      oldFont := DllCall("gdi32\SelectObject", "Ptr", dc, "Ptr", font, "Ptr")
-      VarSetCapacity(size, 8, 0)
-      DllCall("gdi32\GetTextExtentPoint32", "Ptr", dc, "Str", label, "Int", StrLen(label), "Ptr", &size)
-      width := NumGet(size, 0, "Int")
-      DllCall("gdi32\SelectObject", "Ptr", dc, "Ptr", oldFont)
-      DllCall("ReleaseDC", "Ptr", handle, "Ptr", dc)
-      if (width <= statRectW-2 || pointSize <= 8)
-        break
-      pointSize -= 0.5
+  labels := [], compact := {}, rounded := {}, exponent := {}
+  for i, value in values
+    labels.Push(i=4 ? Format("{:.1f} m", value) : FormatCount(value))
+  Loop {
+    widths := [], totalWidth := 0
+    for i, item in StatsPanelTexts {
+      Gui, 1:Font, % "s" 7.5 / (A_ScreenDPI/96) " norm c" theme.text, Segoe UI
+      GuiControl, 1:Font, % item.handle
+      width := MeasureStatText(item.handle, labels[i])+2
+      widths.Push(width), totalWidth += width
     }
+    ; 4 x (14px icon + 4px gap), plus at least 3 x 4px between groups.
+    if (totalWidth <= 156)
+      break
+    best := 0, saving := 0
+    for i, value in values {
+      if (value < 1000 || compact.HasKey(i))
+        continue
+      candidate := CompactStatCount(value) (i=4 ? " m" : "")
+      gain := widths[i] - (MeasureStatText(StatsPanelTexts[i].handle, candidate)+2)
+      if (gain > saving)
+        best := i, saving := gain, bestLabel := candidate
+    }
+    if (best) {
+      labels[best] := bestLabel, compact[best] := true
+      continue
+    }
+    ; Drop fractional thousands while retaining the same font in every range.
+    for i, value in values {
+      if (!compact.HasKey(i) || rounded.HasKey(i))
+        continue
+      candidate := Format("{:.0f}", value/1000) "k" (i=4 ? " m" : "")
+      gain := widths[i] - (MeasureStatText(StatsPanelTexts[i].handle, candidate)+2)
+      if (gain > saving)
+        best := i, saving := gain, bestLabel := candidate
+    }
+    if (best) {
+      labels[best] := bestLabel, rounded[best] := true
+      continue
+    }
+    ; Exceptionally large imported totals: shorter exponent notation, still in k.
+    for i, value in values {
+      if (value < 1000 || exponent.HasKey(i))
+        continue
+      candidate := RegExReplace(Format("{:.0e}", value/1000), "e\+?0*", "e") "k" (i=4 ? " m" : "")
+      gain := widths[i] - (MeasureStatText(StatsPanelTexts[i].handle, candidate)+2)
+      if (gain > saving)
+        best := i, saving := gain, bestLabel := candidate
+    }
+    if (best) {
+      labels[best] := bestLabel, exponent[best] := true
+      continue
+    }
+    break
   }
+  gap := (240-72-totalWidth)/3, x := StatsPanelX+8
+  for i, item in StatsPanelTexts {
+    GuiControl, 1:MoveDraw, % StatsIconHandles[i], % "x" Round(x)
+    GuiControl, 1:MoveDraw, % item.handle, % "x" Round(x+18) " w" widths[i]
+    GuiControl, 1:, % item.handle, % labels[i]
+    x += 18+widths[i]+gap
+  }
+}
+
+CompactStatCount(value) {
+  return RegExReplace(Format("{:.1f}", value/1000), "\.0$", "") "k"
+}
+
+MeasureStatText(handle, label) {
+  dc := DllCall("GetDC", "Ptr", handle, "Ptr")
+  font := DllCall("SendMessage", "Ptr", handle, "UInt", 0x31, "Ptr", 0, "Ptr", 0, "Ptr")
+  oldFont := DllCall("gdi32\SelectObject", "Ptr", dc, "Ptr", font, "Ptr")
+  VarSetCapacity(size, 8, 0)
+  DllCall("gdi32\GetTextExtentPoint32", "Ptr", dc, "Str", label, "Int", StrLen(label), "Ptr", &size)
+  DllCall("gdi32\SelectObject", "Ptr", dc, "Ptr", oldFont)
+  DllCall("ReleaseDC", "Ptr", handle, "Ptr", dc)
+  return NumGet(size, 0, "Int")
 }
 LogHeat(count, maximum) {
   return maximum <= 0 || count <= 0 ? 0 : Min(1, Ln(1 + count) / Ln(1 + maximum))
@@ -234,7 +296,7 @@ FreeTileBrushes() {
   TileGdipToken := 0
 }
 DashboardMouseMove(wParam, lParam, message, handle) {
-  global DisplayCounts, TileBrushes, HoverTile, MouseDetailText, maximum
+  global DisplayCounts, TileBrushes, HoverTile, StatsDetailText, maximum
   nextHover := TileBrushes.HasKey(handle) ? handle : 0
   if (nextHover != HoverTile) {
     if (HoverTile)
@@ -249,9 +311,9 @@ DashboardMouseMove(wParam, lParam, message, handle) {
     ToolTip, % Tr("设置", "Settings")
     return
   }
-  if (A_Gui = 1 && (A_GuiControl = "StatsLine" || A_GuiControl = "ClickStat" || A_GuiControl = "RightClickStat" || A_GuiControl = "DistanceStat")) {
+  if (A_Gui = 1 && (A_GuiControl = "StatsLine" || A_GuiControl = "ClickStat" || A_GuiControl = "RightClickStat" || A_GuiControl = "DistanceStat" || RegExMatch(A_GuiControl, "^StatIcon[1-4]$"))) {
     previous := ""
-    ToolTip, %MouseDetailText%
+    ToolTip, %StatsDetailText%
     return
   }
   if (A_Gui = 1 && A_GuiControl = "QuickStats") {
@@ -400,8 +462,6 @@ ApplyDashboardTheme() {
   Gui, 2:Color, % theme.surface, % theme.idle
   for i, name in ["StatsLine", "ClickStat", "RightClickStat", "DistanceStat"]
     GuiControl, % "1:+c" theme.text, %name%
-  Loop, 4
-    GuiControl, % "1:+c" theme.muted, % "StatCaption" A_Index
   GuiControl, % "1:+c" theme.muted, CoverageLine
   GuiControl, % "1:+c" theme.muted, QuickStats
   for i, window in [hWin, hSettings] {

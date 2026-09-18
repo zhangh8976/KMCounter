@@ -16,12 +16,21 @@ RenderDesignPreviews() {
       ExportOwnClientDrawing(hWin, A_ScriptDir "\screenshots\redesign\native-" preset.name ".png")
     }
   }
+  ThemeIndex := 1, PaletteIndex := 1, SelectedRange := 5
+  keyboard.total.keystrokes := 2164
+  mouse.total.lbcount := 652, mouse.total.rbcount := 31, mouse.total.move := 206.4
+  RefreshDashboard()
+  ExportOwnClientDrawing(hWin, A_ScriptDir "\screenshots\redesign\native-approved-compact.png")
+  keyboard.total.keystrokes := 1234567
+  mouse.total.lbcount := 987654, mouse.total.rbcount := 123456, mouse.total.move := 12345.6
+  RefreshDashboard()
+  ExportOwnClientDrawing(hWin, A_ScriptDir "\screenshots\redesign\native-history-compact.png")
   FileAppend, % "Design previews rendered; drawing errors=" TileRenderErrors "`n", *
   FreeTileBrushes()
   ExitApp, % TileRenderErrors ? 1 : 0
 }
 ExportDashboardDrawing(path) {
-  global DashboardWidth, DashboardHeight, KeyHandles, RangeHandles, SettingsButtonHandle, LegendHandles, RangeTrackHandle, StatsPanelHandle, TileBrushes
+  global DashboardWidth, DashboardHeight, KeyHandles, RangeHandles, SettingsButtonHandle, LegendHandles, RangeTrackHandle, StatsPanelHandle, StatsIconHandles, TileBrushes
   hdc := DllCall("gdi32\CreateCompatibleDC", "Ptr", 0, "Ptr")
   VarSetCapacity(info, 40, 0)
   NumPut(40, info, 0, "UInt"), NumPut(DashboardWidth, info, 4, "Int"), NumPut(-DashboardHeight, info, 8, "Int")
@@ -33,7 +42,7 @@ ExportDashboardDrawing(path) {
   brush := DllCall("gdi32\CreateSolidBrush", "UInt", RGBtoBGR(theme.surface), "Ptr")
   DllCall("FillRect", "Ptr", hdc, "Ptr", &rect, "Ptr", brush)
   DllCall("gdi32\DeleteObject", "Ptr", brush)
-  for i, group in [[StatsPanelHandle], [RangeTrackHandle], KeyHandles, RangeHandles, [SettingsButtonHandle]] {
+  for i, group in [[StatsPanelHandle], StatsIconHandles, [RangeTrackHandle], KeyHandles, RangeHandles, [SettingsButtonHandle]] {
     for key, handle in group {
       GuiControlGet, pos, 1:Pos, %handle%
       GuiControlGet, label, 1:, %handle%
@@ -50,17 +59,17 @@ ExportDashboardDrawing(path) {
     NumPut(posX+posW, rect, 8, "Int"), NumPut(posY+posH, rect, 12, "Int")
     DllCall("FillRect", "Ptr", hdc, "Ptr", &rect, "Ptr", TileBrushes[handle].brush)
   }
-  for i, name in ["QuickStats", "StatsLine", "ClickStat", "RightClickStat", "DistanceStat", "StatCaption1", "StatCaption2", "StatCaption3", "StatCaption4", "CoverageLine"] {
+  for i, name in ["QuickStats", "StatsLine", "ClickStat", "RightClickStat", "DistanceStat", "CoverageLine"] {
     GuiControlGet, pos, 1:Pos, %name%
     GuiControlGet, label, 1:, %name%
     GuiControlGet, handle, 1:Hwnd, %name%
     font := DllCall("SendMessage", "Ptr", handle, "UInt", 0x31, "Ptr", 0, "Ptr", 0, "Ptr")
     DllCall("gdi32\SelectObject", "Ptr", hdc, "Ptr", font)
     DllCall("gdi32\SetBkMode", "Ptr", hdc, "Int", 1)
-    DllCall("gdi32\SetTextColor", "Ptr", hdc, "UInt", RGBtoBGR(i>=2 && i<=5 ? theme.text : (i>=6 && i<=9 ? theme.panelMuted : theme.muted)))
+    DllCall("gdi32\SetTextColor", "Ptr", hdc, "UInt", RGBtoBGR(i>=2 && i<=5 ? theme.text : theme.muted))
     NumPut(posX, rect, 0, "Int"), NumPut(posY, rect, 4, "Int")
     NumPut(posX+posW, rect, 8, "Int"), NumPut(posY+posH, rect, 12, "Int")
-    DllCall("DrawText", "Ptr", hdc, "Str", label, "Int", -1, "Ptr", &rect, "UInt", 0x820 | (DllCall("GetWindowLong", "Ptr", handle, "Int", -16) & 3))
+    DllCall("DrawText", "Ptr", hdc, "Str", label, "Int", -1, "Ptr", &rect, "UInt", 0x820 | (i>=2 && i<=5 ? 4 : 0) | (DllCall("GetWindowLong", "Ptr", handle, "Int", -16) & 3))
   }
   DllCall("gdiplus\GdipCreateBitmapFromHBITMAP", "Ptr", bitmap, "Ptr", 0, "Ptr*", image)
   VarSetCapacity(clsid, 16, 0)
