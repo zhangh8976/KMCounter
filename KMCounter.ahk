@@ -4,13 +4,12 @@
 */
 /*
 更新地址
-https://github.com/telppa/KMCounter
-https://www.autoahk.com/archives/35147
+https://github.com/zhangh8976/KMCounter
 */
 ;编译信息
 ;@Ahk2Exe-Bin Unicode 32*
 ;@Ahk2Exe-SetName KMCounter
-;@Ahk2Exe-SetVersion 4.2.0
+;@Ahk2Exe-SetVersion 4.2.1
 ;@Ahk2Exe-SetCopyright telppa (2021 - )
 ;@Ahk2Exe-SetMainIcon resouces\KMCounter.ico
 
@@ -28,7 +27,7 @@ if (A_Args[1] = "--self-test") {
   RunSelfTests()
   ExitApp
 }
-global APPName:="KMCounter", ver:="4.2"
+global APPName:="KMCounter", ver:="4.2.1"
      , today:=SubStr(A_Now, 1, 8)
      , tomorrow:=EnvAdd(today, 1, "Days", 1, 8)
      , DataStorageDays, firstday
@@ -227,8 +226,10 @@ MenuHandler:
 
   if (A_ThisMenuItem = L_menu_布局定制)
   {
-    Run, https://github.com/telppa/KMCounter
-    Run, https://www.autoahk.com/archives/35147
+    contactEmail := "huizhang8080@gmail.com"
+    Run, % "mailto:" contactEmail "?subject=KMCounter%20layout%20request",, UseErrorLevel
+    if (ErrorLevel)
+      MsgBox, 64, % Tr("布局定制", "Custom Layout"), % Tr("无法打开邮件应用，请发送邮件至：", "Could not open your email app. Please email:") "`n" contactEmail
   }
 
   if (A_ThisMenuItem = L_menu_退出)
@@ -563,7 +564,7 @@ MultiLanguage:
     L_menu_统计:="统计"
     L_menu_设置:="设置"
     L_menu_开机启动:="开机启动"
-    L_menu_布局定制:="布局定制"
+    L_menu_布局定制:="布局定制（邮件）"
     L_menu_退出:="退出"
 
     L_gui1_当前显示数据:="当前显示数据"
@@ -611,7 +612,7 @@ MultiLanguage:
     L_menu_统计:="Statistics"
     L_menu_设置:="Settings"
     L_menu_开机启动:="Start-Up"
-    L_menu_布局定制:="Custom Layout"
+    L_menu_布局定制:="Custom Layout (Email)"
     L_menu_退出:="Exit"
 
     L_gui1_当前显示数据:="Date"

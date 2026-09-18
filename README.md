@@ -69,6 +69,10 @@ A compact Windows keyboard and mouse heatmap with logarithmic intensity, one-cli
 
 更多细节见 [使用与存储说明](PREVIEW.md)。
 
+## 布局定制与联系
+
+托盘中选择“布局定制（邮件）”，即可打开默认邮件应用联系 [huizhang8080@gmail.com](mailto:huizhang8080@gmail.com)。
+
 ## 致谢
 
 - 原项目与作者：[telppa/KMCounter](https://github.com/telppa/KMCounter)
