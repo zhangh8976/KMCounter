@@ -9,7 +9,7 @@ https://github.com/zhangh8976/KMCounter
 ;编译信息
 ;@Ahk2Exe-Bin Unicode 32*
 ;@Ahk2Exe-SetName KMCounter
-;@Ahk2Exe-SetVersion 4.2.2
+;@Ahk2Exe-SetVersion 4.2.3
 ;@Ahk2Exe-SetCopyright telppa (2021 - )
 ;@Ahk2Exe-SetMainIcon resouces\KMCounter.ico
 
@@ -27,7 +27,7 @@ if (A_Args[1] = "--self-test") {
   RunSelfTests()
   ExitApp
 }
-global APPName:="KMCounter", ver:="4.2.2"
+global APPName:="KMCounter", ver:="4.2.3"
      , today:=SubStr(A_Now, 1, 8)
      , tomorrow:=EnvAdd(today, 1, "Days", 1, 8)
      , DataStorageDays, firstday

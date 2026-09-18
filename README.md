@@ -6,7 +6,7 @@ A compact Windows keyboard and mouse heatmap with logarithmic intensity, one-cli
 
 基于 [telppa/KMCounter](https://github.com/telppa/KMCounter) 改造，保留原项目历史，并重新设计了界面、配色与历史数据管理。
 
-![KMCounter 深色界面](screenshots/redesign/dark-ice.png)
+![KMCounter 4.2.3 深色界面：单行统计图标与紧凑布局](screenshots/v4.2.3/dark-ice.png)
 
 ## 界面与配色
 
@@ -14,27 +14,27 @@ A compact Windows keyboard and mouse heatmap with logarithmic intensity, one-cli
 
 | 樱粉 · Blossom | 薄荷绿 · Mint |
 | --- | --- |
-| ![樱粉](screenshots/redesign/light-pink.png) | ![薄荷绿](screenshots/redesign/light-mint.png) |
+| ![樱粉](screenshots/v4.2.3/light-pink.png) | ![薄荷绿](screenshots/v4.2.3/light-mint.png) |
 
 | 雾蓝 · Mist blue | 淡紫 · Lilac |
 | --- | --- |
-| ![雾蓝](screenshots/redesign/light-blue.png) | ![淡紫](screenshots/redesign/light-lilac.png) |
+| ![雾蓝](screenshots/v4.2.3/light-blue.png) | ![淡紫](screenshots/v4.2.3/light-lilac.png) |
 
 设置中可以直接预览并选择外观，与托盘选项同步。两种模式分别记住上次的配色，支持中文和 English。
 
 <p align="center">
-  <img src="screenshots/redesign/settings-dark-english.png" alt="Dark mode settings with palette previews" width="420">
-  <img src="screenshots/redesign/settings-light-blue.png" alt="Light 模式设置与完整配色预览" width="420">
+  <img src="screenshots/v4.2.3/settings-dark-english.png" alt="Dark mode settings with palette previews" width="420">
+  <img src="screenshots/v4.2.3/settings-light-blue.png" alt="Light 模式设置与完整配色预览" width="420">
 </p>
 
-以上图片均由本版程序使用合成演示数据生成，不包含个人键鼠记录。
+以上图片由 4.2.3 版程序的原生窗口离屏绘制生成，使用合成演示数据，不包含个人键鼠记录。
 
 ## 功能
 
 - **对数热力图**：采用 `ln(1 + count) / ln(1 + max)`，让使用次数相差几个数量级的按键仍能区分。
 - **点选时间范围**：今日、本周、本月、今年、历史总计。
-- **独立鼠标统计**：左键、右键分别计数，展示移动距离；悬停可查看中键、侧键与滚轮细项。
-- **轻量桌面界面**：紧凑布局、圆角键帽、独立灰阶时间选择和低对比度统计面板。
+- **单行图标统计**：键击、左键、右键与移动距离采用简笔图标和统一小字号；数字过长时以 `k` 缩写，悬停查看精确值及鼠标细项。
+- **轻量桌面界面**：32px 高统计条与功能键底边、数字键区右边缘对齐，顶部栏和底部说明向键盘收拢；保留圆角键帽和独立灰阶时间选择。
 - **历史分段存储**：主文件默认保留最近 366 天，更早的每日明细按年归档；历史总计独立累计。
 - **本地运行**：统计和设置保存在程序目录，关闭窗口后仍可驻留托盘。
 
