@@ -1,3 +1,23 @@
 
 KMCounter.ini
 todo.txt
+
+tools/AutoHotkey/
+tools/AutoHotkey.zip
+history/
+*.bak
+*.pending
+tests/tmp/
+
+KMCounter.exe
+tests/*.txt
+tools/__pycache__/
+
+/KMCounter.next.exe
+/KMCounter.previous-*.exe
+
+/dist/
+/screenshots/redesign/native-*.png
+/screenshots/redesign/settings-*.png
+!/screenshots/redesign/settings-dark-english.png
+!/screenshots/redesign/settings-light-blue.png

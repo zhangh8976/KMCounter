@@ -10,15 +10,25 @@ https://www.autoahk.com/archives/35147
 ;编译信息
 ;@Ahk2Exe-Bin Unicode 32*
 ;@Ahk2Exe-SetName KMCounter
-;@Ahk2Exe-SetVersion 3.7
+;@Ahk2Exe-SetVersion 4.2.0
 ;@Ahk2Exe-SetCopyright telppa (2021 - )
 ;@Ahk2Exe-SetMainIcon resouces\KMCounter.ico
 
 #NoEnv
 #SingleInstance Force
 SetBatchLines, -1
+SetWorkingDir, %A_ScriptDir%
+#Include %A_ScriptDir%\Lib\TileRenderer.ahk
+#Include %A_ScriptDir%\Lib\Heatmap.ahk
+#Include %A_ScriptDir%\Lib\Storage.ahk
+#Include %A_ScriptDir%\Lib\Localization.ahk
 
-global APPName:="KMCounter", ver:=3.7
+global DemoMode := (A_Args[1] = "--demo" || A_Args[1] = "--smoke" || A_Args[1] = "--render-preview")
+if (A_Args[1] = "--self-test") {
+  RunSelfTests()
+  ExitApp
+}
+global APPName:="KMCounter", ver:="4.2"
      , today:=SubStr(A_Now, 1, 8)
      , tomorrow:=EnvAdd(today, 1, "Days", 1, 8)
      , DataStorageDays, firstday
@@ -26,198 +36,103 @@ global APPName:="KMCounter", ver:=3.7
      , hHookMouse, mouse:={}
      , hHookKeyboard, keyboard:={}
 
-gosub, MultiLanguage                    ; 多语言支持
-gosub, Welcome                          ; 首次使用时显示欢迎信息
-LoadData(today)                         ; 初始化除 hHookMouse hHookKeyboard 的全部全局变量
-gosub, BlockClickOnGui1                 ; 因为键盘热力图是用 Edit 控件画的，所以屏蔽鼠标点击避免其造成控件外观改变
+LoadData(today)
+gosub, MultiLanguage
 gosub, CreateMenu                       ; 创建托盘菜单
 gosub, CreateGui1                       ; 预先创建 GUI1 以便需要时加速显示
 gosub, CreateGui2                       ; 预先创建 GUI2 以便需要时加速显示
 
-HookMouse()                             ; 鼠标钩子
-HookKeyboard()                          ; 键盘钩子
+if (A_Args[1] = "--render-preview") {
+  RenderDesignPreviews()
+  ExitApp
+}
+
+if (A_Args[1] = "--smoke") {
+  TestDashboard()
+  ExitApp
+}
+
+if (!DemoMode) {
+  HookMouse()
+  HookKeyboard()
+}
 
 SetTimer, Reload, % countdown()         ; 设置一个计时器用于跨夜时重启进程以便保存当日数据并开始新的一天
-SetTimer, ReloadHook, % 60000*10        ; 每10分钟重载一次钩子，避免用户的按键映射型钩子的影响
+if (!DemoMode)
+  SetTimer, ReloadHook, % 60000*10        ; 每10分钟重载一次钩子，避免用户的按键映射型钩子的影响
 OnExit("ExitFunc")                      ; 退出时在这里卸载钩子并保存参数
 
-return
-
-Welcome:
-IfNotExist, KMCounter.ini
-  OSDTIP_Pop(L_welcome_main, L_welcome_sub, -20000, "fm12 fs9 W320", "微软雅黑")
+SetTimer, RefreshDashboard, 1000
+if (!DemoMode)
+  SetTimer, PersistCounts, 60000
+if (DemoMode || A_Args[1] != "--background")
+  gosub, ShowHeatMap
 return
 
 CreateGui1:
-  ControlList:=LoadControlList(layout)                          ; 控件布局信息在此处创建
-  Opt   := ControlList.Opt
-  scale := A_ScreenDPI/96
-  Gui, -DPIScale +HwndhWin                                      ; 禁止系统 DPI 缩放
-  Gui, Color, % Opt.BackgroundColor, % Opt.BackgroundColor
-  Gui, Font, % "S" Opt.FontSize//scale, % Opt.Font              ; 高分屏下缩小字号
-  for k, control in ControlList
-  {
-    p:=""
-    for k1, optname in ["x", "y", "w", "h", "Hwnd"]
-    {
-      ; 构造控件所需参数。当 xywhHwnd 不为空，则
-      ; p:="x+123 y+123 w123 h123 Hwndsc123 " 或 p:="xm+123 ys+123 w123 h123 Hwndsc123 " 等等
-      ; 任意为空，则对应的项消失，例如 xy 为空，则
-      ; p:="w123 h123 Hwndsc123 "
-      if (control[optname]!="")
-        p.=" " optname control[optname]
-    }
-    if (InStr(control.Hwnd, "sc"))
-    {
-      ; 增加 v变量 ，形如 “keysc123” 。
-      ; 完全是给 WM_MOUSEMOVE 用的，因为 A_GuiControl 只显示文本或 v变量 。
-      p.=" vkey" control.Hwnd
-      ; 创建按键。 Edit 控件比 Text 控件多一条白色细边框，更好看一些。
-      Gui, Add, Edit, % "C" Opt.TextColor " Center ReadOnly -WantCtrlA -TabStop -Vscroll" p, % control.Text
-    }
-    else if (control.Hwnd="Message")
-    {
-      ; 增加 v变量 ，形如 “msgMessage” 。
-      p.=" vmsg" control.Hwnd
-      ; 创建信息框
-      Gui, Add, ListView, % "C" Opt.TextColor " +Grid Count10 -Hdr -HScroll" p, % L_gui1_LV标题
-      for k1, field in [L_gui1_鼠标移动, L_gui1_键盘敲击
-                      , L_gui1_左键点击, L_gui1_右键点击, L_gui1_中键点击
-                      , L_gui1_滚轮滚动, L_gui1_滚轮横滚
-                      , L_gui1_侧键点击
-                      , L_gui1_屏幕尺寸]
-        LV_Add("", field)
-
-      LV_ModifyCol(2, "Right")                            ; 文本右对齐
-      LV_ModifyCol(3, "Right")
-      LV_ModifyCol(4, "Right")
-      LV_ModifyCol(5, "Right")
-      LV_ModifyCol(1, 70)                                 ; 1 列宽度设为70
-      LV_ModifyCol(3, 0)                                  ; 3、4 列宽度设为0
-      LV_ModifyCol(4, 0)
-      LV_ModifyCol(2, (control.w-70-Ceil(22*scale))//2)   ; 2、5 列平分剩下的宽度
-      LV_ModifyCol(5, (control.w-70-Ceil(22*scale))//2)   ; 即使关闭了 DPIScale 滚动条的宽度依然受影响 所以需要乘以系数
-    }
-  }
-  Gui, Show, Hide
+  BuildDashboard()
 return
 
-; 统计界面下，滚轮与翻页键切换历史回忆。
-#If (WinActive("ahk_id " hWin))
-WheelDown::
-WheelUp::
-PgDn::
-PgUp::
-Down::
-Up::
-  Critical
-  ; 设置默认值
-  NonNull(history, today)
-  loop, % DataStorageDays+1
-  {
-    switch, A_ThisHotkey
-    {
-      case, "WheelDown","PgDn","Down": history:=EnvAdd(history, -1, "Days", 1, 8)  ; 前一天
-      case, "WheelUp","PgUp","Up":     history:=EnvAdd(history,  1, "Days", 1, 8)  ; 后一天
-    }
-    ; 日期永远在今天、总计、第一天之间循环
-    if (history > tomorrow)
-      history := firstday
-    if (history < firstday)
-      history := tomorrow
-
-    ; 显示全部数据
-    if (history = tomorrow)
-    {
-      date := "Total"
-      gosub, ShowHeatMap
-      break
-    }
-    ; 找到历史数据，并且历史数据与当前显示数据不同，则刷新
-    if (LoadData(history) and date!=history)
-    {
-      date := history
-      gosub, ShowHeatMap
-      break
-    }
-  }
+RangeClick:
+  SelectedRange := SubStr(A_GuiControl, 6) + 0
+  gosub, ShowHeatMap
 return
-#If
+
+SelectThemeFromTray:
+  for i, label in ThemeMenuLabels
+    if (A_ThisMenuItem = label) {
+      SetDashboardTheme(i)
+      break
+    }
+return
+
+OpenSettings:
+  GuiControl, 2:, dsd,  % DataStorageDays
+  GuiControl, 2:, dw,   % devicecaps.w
+  GuiControl, 2:, dh,   % devicecaps.h
+  GuiControl, 2:, lkw,  % layout.kw
+  GuiControl, 2:, lkh,  % layout.kh
+  GuiControl, 2:, lks,  % layout.ks
+  GuiControl, 2:, lkhs, % layout.khs
+  GuiControl, 2:, lkvs, % layout.kvs
+  Gui, 2:Show, , %L_gui2_设置%
+return
+
+SelectLanguageFromTray:
+  SetDashboardLanguage(A_ThisMenuItem = "English" ? "en" : "zh")
+return
+
+SelectPaletteFromTray:
+  for i, label in PaletteMenuLabels
+    if (A_ThisMenuItem = label) {
+      SetDashboardPalette(i)
+      break
+    }
+return
+
+ShowHeatMap:
+  Gui, 1:Show, , % "KMCounter" (DemoMode ? Tr(" · 演示数据", " · Demo") : "")
+  RefreshDashboard()
+return
+
+RefreshDashboard:
+  if (DllCall("IsWindowVisible", "Ptr", hWin))
+    RefreshDashboard()
+return
+
+PersistCounts:
+  SaveData()
+return
 
 GuiEscape:
 GuiClose:
-  Gui, Hide
-  history:=""
-  btt()
+  Gui, 1:Hide
+  ToolTip
 return
 
 CreateGui2:
-{
-  Gui, 2:Color, 444444, 444444
-
-  Gui, 2:Font, s19 Bold cEEEEEE, 微软雅黑
-  Gui, 2:Add, Text, x16 y24 w216 h30 +0x200, %L_gui2_历史数据%
-  Gui, 2:Font
-  Gui, 2:Font, cEEEEEE, 微软雅黑
-  Gui, 2:Add, Text, x16 yp+40 w216 h23, %L_gui2_sub1%
-
-  Gui, 2:Add, Text, x16 yp+40 w85 h23, %L_gui2_存储%:
-  Gui, 2:Add, Edit, x104 yp-2 w85 h19 Number Limit -Multi vdsd, % DataStorageDays
-  Gui, 2:Add, Text, x197 yp+2 w30 h23, %L_gui2_天%
-
-  Gui, 2:Font, s19 Bold cEEEEEE, 微软雅黑
-  Gui, 2:Add, Text, x16 yp+48 w216 h30 +0x200, %L_gui2_屏幕尺寸%
-  Gui, 2:Font
-  Gui, 2:Font, cEEEEEE, 微软雅黑
-  Gui, 2:Add, Text, x16 yp+40 w216 h23, %L_gui2_sub2%
-
-  Gui, 2:Add, Text, x16 yp+40 w85 h23, %L_gui2_屏幕宽%:
-  Gui, 2:Add, Edit, x104 yp-2 w85 h19 Number Limit -Multi vdw, % devicecaps.w
-  Gui, 2:Add, Text, x197 yp+2 w30 h23, %L_gui2_毫米%
-
-  Gui, 2:Add, Text, x16 yp+32 w85 h23, %L_gui2_屏幕高%:
-  Gui, 2:Add, Edit, x104 yp-2 w85 h19 Number Limit -Multi vdh, % devicecaps.h
-  Gui, 2:Add, Text, x197 yp+2 w30 h23, %L_gui2_毫米%
-
-  Gui, 2:Font, s19 Bold cEEEEEE, 微软雅黑
-  Gui, 2:Add, Text, x16 yp+48 w216 h30 +0x200, %L_gui2_键盘布局%
-  Gui, 2:Font
-  Gui, 2:Font, cEEEEEE, 微软雅黑
-  Gui, 2:Add, Text, x16 yp+40 w216 h23, %L_gui2_sub3%
-
-  Gui, 2:Add, Text, x16 yp+40 w85 h23, %L_gui2_键宽%:
-  Gui, 2:Add, Edit, x104 yp-2 w85 h19 Number Limit -Multi vlkw, % layout.kw
-  Gui, 2:Add, Text, x197 yp+2 w30 h23, %L_gui2_像素%
-
-  Gui, 2:Add, Text, x16 yp+32 w85 h23, %L_gui2_键高%:
-  Gui, 2:Add, Edit, x104 yp-2 w85 h19 Number Limit -Multi vlkh, % layout.kh
-  Gui, 2:Add, Text, x197 yp+2 w30 h23, %L_gui2_像素%
-
-  Gui, 2:Add, Text, x16 yp+32 w85 h23, %L_gui2_键间距%:
-  Gui, 2:Add, Edit, x104 yp-2 w85 h19 Number Limit -Multi vlks, % layout.ks
-  Gui, 2:Add, Text, x197 yp+2 w30 h23, %L_gui2_像素%
-
-  Gui, 2:Add, Text, x16 yp+32 w85 h23, %L_gui2_区域水平间距%:
-  Gui, 2:Add, Edit, x104 yp-2 w85 h19 Number Limit -Multi vlkhs, % layout.khs
-  Gui, 2:Add, Text, x197 yp+2 w30 h23, %L_gui2_像素%
-
-  Gui, 2:Add, Text, x16 yp+32 w85 h23, %L_gui2_区域垂直间距%:
-  Gui, 2:Add, Edit, x104 yp-2 w85 h19 Number Limit -Multi vlkvs, % layout.kvs
-  Gui, 2:Add, Text, x197 yp+2 w30 h23, %L_gui2_像素%
-
-  Gui, 2:Add, Button, x16 yp+48 w80 h30 gCancelSetting hwndhBT1, %L_gui2_取消%
-  Gui, 2:Add, Button, x140 yp+0 w80 h30 gSaveSetting hwndhBT2, %L_gui2_保存%
-
-  Opt1 := [0, 0xff708090, , 0xffeeeeee, 5, 0xff444444]  ; 按钮正常时候的样子
-  Opt2 := [0, 0xffeeeeee, , 0xff708090, 5, 0xff444444]  ; 鼠标在按钮上的样子
-  Opt5 := Opt1                                          ; 被按过一次后的样子
-  if !(ImageButton.Create(hBT1, Opt1, Opt2, , , Opt5))
-    MsgBox, 0, ImageButton Error btn1, % ImageButton.LastError
-  if !(ImageButton.Create(hBT2, Opt1, Opt2, , , Opt5))
-    MsgBox, 0, ImageButton Error btn1, % ImageButton.LastError
-
-  Gui, 2:Show, w235 h622 Hide
-}
+  BuildSettings()
+  ApplyLanguageLabels()
 return
 
 CancelSetting:
@@ -228,8 +143,8 @@ return
 
 SaveSetting:
   Gui, 2:Submit
-  ; 限制历史数据存储天数最小值为0，默认值为30。
-  DataStorageDays := NonNull_Ret(dsd, 30, 0)
+  ; 主文件保留天数；旧明细按年归档。
+  DataStorageDays := Round(NonNull_Ret(dsd, 366, 1))
   UpdateDeviceCaps(dw, dh)
   UpdateLayout(lkw, lkh, lks, lkhs, lkvs)
   ; 直接重启以便更新设置
@@ -242,18 +157,39 @@ return
 
 ReloadHook:
   ; 如果用户的 .ahk 在我们之后运行，并且其中含有 a::b 之类的按键映射，此时就需要重载以便我们的钩子更靠前，才能获取消息。
-  DllCall("UnhookWindowsHookEx", "UInt", hHookMouse)
-  DllCall("UnhookWindowsHookEx", "UInt", hHookKeyboard)
+  DllCall("UnhookWindowsHookEx", "Ptr", hHookMouse)
+  DllCall("UnhookWindowsHookEx", "Ptr", hHookKeyboard)
   HookMouse()
   HookKeyboard()
 return
 
 CreateMenu:
 {
+  if (MenusReady) {
+    Menu, Tray, DeleteAll
+    Menu, SettingsMenu, DeleteAll
+    Menu, ThemeMenu, DeleteAll
+    Menu, PaletteMenu, DeleteAll
+    Menu, LanguageMenu, DeleteAll
+  }
+  MenusReady := true
   Menu, Tray, NoStandard                           ; 不显示 ahk 自己的菜单
   Menu, Tray, Tip, %APPName% v%ver%                ; 托盘提示信息
   Menu, Tray, Add, %L_menu_统计%,     MenuHandler  ; 创建新菜单项
-  Menu, Tray, Add, %L_menu_设置%,     MenuHandler
+  ThemeMenuLabels := [ThemeDisplayName(1), ThemeDisplayName(2)]
+  Menu, SettingsMenu, Add, % Tr("常规设置…", "Preferences…"), OpenSettings
+  Menu, SettingsMenu, Add
+  for i, label in ThemeMenuLabels
+    Menu, ThemeMenu, Add, %label%, SelectThemeFromTray, +Radio
+  Menu, SettingsMenu, Add, % Tr("主题", "Theme"), :ThemeMenu
+  UpdateThemeMenu()
+  PaletteMenuLabels := []
+  UpdatePaletteMenu(true)
+  Menu, LanguageMenu, Add, 中文, SelectLanguageFromTray, +Radio
+  Menu, LanguageMenu, Add, English, SelectLanguageFromTray, +Radio
+  Menu, LanguageMenu, Check, % AppLanguage="en" ? "English" : "中文"
+  Menu, SettingsMenu, Add, 语言 / Language, :LanguageMenu
+  Menu, Tray, Add, %L_menu_设置%, :SettingsMenu
   Menu, Tray, Add                                  ; 分隔符
   Menu, Tray, Add, %L_menu_开机启动%, MenuHandler
   Menu, Tray, Add, %L_menu_布局定制%, MenuHandler
@@ -261,30 +197,8 @@ CreateMenu:
   Menu, Tray, Add, %L_menu_退出%,     MenuHandler
   Menu, Tray, Default, %L_menu_统计%               ; 将统计设为默认项
 
-  ico1:="iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAA4klEQVQ4T6XToU5DQRCF4e+6VvQBeIVCQuqQYCENinoMDQkCgcJQ"
-  ico1.="dE0FqkhEkzYoBAEErrwA8DqQSe5NNrTcbtNRK3b+nTnnbGHDKsr+AW4yWD3M0nsV4Afb+M6AnGIPZzhIAdW5jrGP9+RCa11AExMc"
-  ico1.="4xmHdYAjXOEaH9jFPYblBA08/Afo4A13OMcFRrhMRGyHZssAW3jFI8KdyqG/DnxiZxngBXPcrnAknCtSwEk5Xry4qjnYC4AuntDH"
-  ico1.="OCMPC4DcIAU7BPxKV8iNcjpYrDnISV/tNhVgihBxnYpP1dt4gl9sRC5dONyGKQAAAABJRU5ErkJggg=="
-  ico1:=ImagePutHIcon(ico1)
-
-  ico2:="iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAABVklEQVQ4T63TP0tXcRTH8ZdGTyAcXIJagxYXUQJ1qaUnELaILTqI"
-  ico2.="o2L4BzRzaWgogqIlwbaG0jGHyEUI8gkYbQ0tgUtLfOBcuV74haBnuff757zPOZ9zvn0uaH09/MfxuXM2gf3u/S4gjrmU7wriFAts"
-  ico2.="rXV2CmoDNjCPVdzCjQ4g6wM8wBMshdwAbuM77mILPzCHn5XBNWxiEAmUDIZx1AC26/JCq8ZJ3Kn1F+ROY+u4ickGcFgnSf8jRivS"
-  ico2.="Ue0nw6T8FferzH4MtTWIaBEvwr3DX0wV4C2u4mEJ+g2PcdIGJPpYAV4WIDrEnhdgpgCvsNMWMSWc4Bk+pDY8wnEB0oHXpUNKWMan"
-  ico2.="tPZ/IkaH2QK8qPobEZ/iT3TqtvEekuYvLOJ3eVyvMpLRLt4jrT2dg/ynv4m4h5FKvz2JcRjAlZrK6HQGkPV5Rnkab5paLv0x9Xic"
-  ico2.="vbf/AUZITBFlGQzCAAAAAElFTkSuQmCC"
-  ico2:=ImagePutHIcon(ico2)
-
-  ico3.="iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAgElEQVQ4T2NkoBAwUqifAW6Ajo7Of1IMu3LlClgvigEwQUIGgSyj"
-  ico3.="jQFINh9gZGRU+P///y0017jB+FhdwMjIqAdS8P//f2FGRsY+BgaGeGze+f///yW8XtDR0RFnYGBYc+XKFVtsBhAMg1EDGBjIDgNC"
-  ico3.="KRBZHiMaSdGMrJbi3AgA8Z51EexVYzAAAAAASUVORK5CYII="
-  ico3:=ImagePutHIcon(ico3)
-
   if (!A_IsCompiled)
-    Menu, Tray, Icon, resouces\%APPName%.ico         ; 加载托盘图标
-  Menu, Tray, Icon, %L_menu_统计%,     HICON:%ico1%  ; 加载菜单图标
-  Menu, Tray, Icon, %L_menu_设置%,     HICON:%ico2%
-  Menu, Tray, Icon, %L_menu_布局定制%, HICON:%ico3%
+    Menu, Tray, Icon, resouces\KMCounter.ico
 
   IfExist, %A_Startup%\%APPName%.Lnk                 ; 检测启动文件夹中是否有快捷方式来确定是否勾选自启
     Menu, Tray, Check, %L_menu_开机启动%
@@ -294,20 +208,7 @@ return
 MenuHandler:
   if (A_ThisMenuItem = L_menu_统计)
   {
-    date := today
     gosub, ShowHeatMap
-  }
-
-  if (A_ThisMenuItem = L_menu_设置)
-  {
-    GuiControl, 2:, dw,   % devicecaps.w
-    GuiControl, 2:, dh,   % devicecaps.h
-    GuiControl, 2:, lkw,  % layout.kw
-    GuiControl, 2:, lkh,  % layout.kh
-    GuiControl, 2:, lks,  % layout.ks
-    GuiControl, 2:, lkhs, % layout.khs
-    GuiControl, 2:, lkvs, % layout.kvs
-    Gui, 2:Show, , %L_gui2_设置%
   }
 
   if (A_ThisMenuItem = L_menu_开机启动)
@@ -319,7 +220,7 @@ MenuHandler:
     }
     else
     {
-      FileCreateShortcut, %A_ScriptFullPath%, %A_Startup%\%APPName%.Lnk, %A_ScriptDir%
+      FileCreateShortcut, %A_ScriptFullPath%, %A_Startup%\%APPName%.Lnk, %A_ScriptDir%, --background
       Menu, Tray, Check, %L_menu_开机启动%
     }
   }
@@ -334,214 +235,13 @@ MenuHandler:
     ExitApp
 return
 
-ShowHeatMap:
-{
-  ; 一定要先 Show 再设置按键颜色，否则不定时出错  
-  Gui, Show, , % Format("{1} v{2} | {3} - {4}", APPName, ver, L_gui1_当前显示数据, date)
-  ; 先显示文字统计信息
-  LV_Modify(1,,, Format("{:.2f} {2}", mouse[date].move,          L_gui1_米),,
-               , Format("{:.2f} {2}", mouse.total.move,          L_gui1_米))
-  LV_Modify(2,,, Format("{1} {2}",    keyboard[date].keystrokes, L_gui1_次),,
-               , Format("{1} {2}",    keyboard.total.keystrokes, L_gui1_次))
-  LV_Modify(3,,, Format("{1} {2}",    mouse[date].lbcount,       L_gui1_次),,
-               , Format("{1} {2}",    mouse.total.lbcount,       L_gui1_次))
-  LV_Modify(4,,, Format("{1} {2}",    mouse[date].rbcount,       L_gui1_次),,
-               , Format("{1} {2}",    mouse.total.rbcount,       L_gui1_次))
-  LV_Modify(5,,, Format("{1} {2}",    mouse[date].mbcount,       L_gui1_次),,
-               , Format("{1} {2}",    mouse.total.mbcount,       L_gui1_次))
-  LV_Modify(6,,, Format("{1} {2}",    mouse[date].wheel,         L_gui1_次),,
-               , Format("{1} {2}",    mouse.total.wheel,         L_gui1_次))
-  LV_Modify(7,,, Format("{1} {2}",    mouse[date].hwheel,        L_gui1_次),,
-               , Format("{1} {2}",    mouse.total.hwheel,        L_gui1_次))
-  LV_Modify(8,,, Format("{1} {2}",    mouse[date].xbcount,       L_gui1_次),,
-               , Format("{1} {2}",    mouse.total.xbcount,       L_gui1_次))
-  LV_Modify(9,,, Format("{:.1f} {2}", devicecaps.size,           L_gui1_寸))
-  ; 有了一定的数据量后再显示图案，同时可以避免初始颜色显示错误
-  if (keyboard[date].keystrokes >= 100)
-  {
-    ; 获取一组渐变色
-    colors   := getcolors(0xEEEEEE, 0xB26C65, 100)
-    ; 将总量的1成设置为对比量
-    maxcount := keyboard[date].keystrokes / 10
-    for k, count in keyboard[date]
-    {
-      ; 按键量大于等于对比量，直接显示最深的颜色
-      if (count >= maxcount)
-        color := colors[100]
-      ; 按键量小于1/100的对比量时，直接显示最浅的颜色
-      else if (count < maxcount/100)
-        color := colors[1]
-      ; 根据按键量占据对比量的百分比，绘制颜色
-      else
-        color := colors[Floor(count/maxcount*100)]
-
-      ; 设置按键颜色
-      CtlColors.Change(%k%, color, Opt.TextColor)
-    }
-  }
-  else
-  {
-    ; 数据量不足显示提示框
-    for k, count in keyboard[date]
-      CtlColors.Change(%k%, Opt.BackgroundColor, Opt.TextColor)
-    MsgBox 0x42040, , %L_gui1_msgbox%
-  }
-}
-return
-
-WM_MOUSEMOVE()
-{
-  static init:=OnMessage(0x200, "WM_MOUSEMOVE"), IsMessageMaximized:=0
-  global date, L_gui1_次, ControlList
-  if (A_Gui = 1)
-  {
-    if (A_GuiControl = "msgMessage")
-    {
-      if (IsMessageMaximized = 0)
-      {
-        ; 鼠标移动到信息框时自动放大显示。
-        GuiControl, Move, msgMessage, % "h" layout.kh*6+layout.khs+layout.ks*4
-        ; 显示标题栏。
-        GuiControl, +Hdr, msgMessage
-        ; 此时必须隐藏按键，否则按键轮廓会穿透信息框。
-        for k, v in ControlList.Covered
-          GuiControl, Hide, % "key" v
-        IsMessageMaximized := 1
-      }
-    }
-    else
-    {
-      if (IsMessageMaximized = 1)
-      {
-        ; 信息框恢复最小化。
-        GuiControl, Move, msgMessage, % "h" layout.kh
-        ; 隐藏标题栏。
-        GuiControl, -Hdr, msgMessage
-        ; 显示按键。
-        for k, v in ControlList.Covered
-          GuiControl, Show, % "key" v
-        IsMessageMaximized := 0
-      }
-
-      ; 鼠标移动到按键上时，显示对应按键敲击次数。
-      key:=SubStr(A_GuiControl, 4)
-      if (keyboard[date].HasKey(key))
-        btt(keyboard[date][key] " " L_gui1_次,,,,"Style2")
-      else
-        btt()
-    }
-  }
-  else
-    btt()
-}
-
-BlockClickOnGui1:
-{
-  OnMessage(0x0201, "BlockClick")   ; 左键按下
-  OnMessage(0x0202, "BlockClick")   ; 左键弹起
-  OnMessage(0x0203, "BlockClick")   ; 左键双击
-  OnMessage(0x0204, "BlockClick")   ; 右键按下
-  OnMessage(0x0205, "BlockClick")   ; 右键弹起
-  OnMessage(0x0206, "BlockClick")   ; 右键双击
-}
-return
-
-BlockClick(wParam, lParam, msg, hwnd)
-{
-  if (A_Gui=1)
-    return, 0                       ; 必须返回0才能丢掉消息实现屏蔽的效果
-}
-
 ExitFunc(ExitReason, ExitCode)
 {
-  DllCall("UnhookWindowsHookEx", "UInt", hHookMouse)
-  DllCall("UnhookWindowsHookEx", "UInt", hHookKeyboard)
-  CtlColors.Free()
-  SaveData()
-}
-
-LoadData(date)
-{
-  ; 获取历史数据存储天数
-  DataStorageDays := IniRead("KMCounter.ini", "history", "storage", 30)
-  firstday        := EnvAdd(today, -DataStorageDays, "Days", 1, 8)
-
-  ; 删除超时的历史数据
-  SectionNames := StrSplit(IniRead("KMCounter.ini"), "`n", " `t`r`n`v`f")
-  SavedSectionNames:={}
-  for k, SectionName in SectionNames
-  {
-    if SectionName is integer
-    {
-      if (SectionName < firstday)                ; 小于第一天则算超时
-        IniDelete, KMCounter.ini, %SectionName%  ; 因为要省略最后一个参数才能删除整段，所以只能用命令的形式
-      else
-        SavedSectionNames[SectionName]:=""
-    }
-  }
-  ; 历史数据不存在则返回 false
-  if (!SavedSectionNames.HasKey(date) and date!=today)
-    return, false
-  ; 历史数据已存在则返回 true
-  if (IsObject(mouse[date]) or IsObject(keyboard[date]))
-    return, true
-
-  ; 获取屏幕信息
-  devicecaps.w := IniRead("KMCounter.ini", "devicecaps", "w", " ")            ; 传空格给最后一个参数才能让默认值变空值（空格）
-  devicecaps.h := IniRead("KMCounter.ini", "devicecaps", "h", " ")
-  UpdateDeviceCaps(devicecaps.w, devicecaps.h)                                ; 更新 devicecaps
-  ; 获取布局信息
-  ratio        := A_ScreenWidth<1920 ? A_ScreenWidth/1920 : 1                 ; 高分辨率屏幕通常有 DPIScale 设置，所以不调大小。
-  layout.kw    := IniRead("KMCounter.ini", "layout", "kw",  Round(52*ratio))  ; 键宽
-  layout.kh    := IniRead("KMCounter.ini", "layout", "kh",  Round(45*ratio))  ; 键高
-  layout.ks    := IniRead("KMCounter.ini", "layout", "ks",  Round(2*ratio))   ; 键间距
-  layout.khs   := IniRead("KMCounter.ini", "layout", "khs", Round(10*ratio))  ; 区域水平间距
-  layout.kvs   := IniRead("KMCounter.ini", "layout", "kvs", Round(10*ratio))  ; 区域垂直间距
-  ; 获取鼠标信息
-  for k, v in ["lbcount", "rbcount", "mbcount", "xbcount", "wheel", "hwheel", "move"]
-  {
-    mouse[date, v]    := IniRead("KMCounter.ini", date,    v, 0)
-    mouse["total", v] := IniRead("KMCounter.ini", "total", v, 0)
-  }
-  ; 获取按键信息
-  for k, control in LoadControlList()
-  {
-    if (InStr(control.Hwnd, "sc"))
-    {
-      keyboard[date, control.Hwnd]    := IniRead("KMCounter.ini", date,    control.Hwnd, 0)
-      keyboard["total", control.Hwnd] := IniRead("KMCounter.ini", "total", control.Hwnd, 0)
-    }
-  }
-  keyboard[date].keystrokes           := IniRead("KMCounter.ini", date,    "keystrokes", 0)
-  keyboard["total"].keystrokes        := IniRead("KMCounter.ini", "total", "keystrokes", 0)
-
-  return, true
-}
-
-SaveData()
-{
-  ; 保存历史数据存储天数
-  IniWrite(DataStorageDays, "KMCounter.ini", "history", "storage")
-  ; 保存屏幕信息
-  IniWrite(devicecaps.w,  "KMCounter.ini", "devicecaps", "w")
-  IniWrite(devicecaps.h,  "KMCounter.ini", "devicecaps", "h")
-  ; 保存布局信息
-  IniWrite(layout.kw,     "KMCounter.ini", "layout", "kw")
-  IniWrite(layout.kh,     "KMCounter.ini", "layout", "kh")
-  IniWrite(layout.ks,     "KMCounter.ini", "layout", "ks")
-  IniWrite(layout.khs,    "KMCounter.ini", "layout", "khs")
-  IniWrite(layout.kvs,    "KMCounter.ini", "layout", "kvs")
-  ; 保存鼠标信息
-  for k, v in ["lbcount", "rbcount", "mbcount", "xbcount", "wheel", "hwheel", "move"]
-  {
-    IniWrite(mouse[today][v],   "KMCounter.ini",   today, v)
-    IniWrite(mouse["total"][v], "KMCounter.ini", "total", v)
-  }
-  ; 保存按键信息
-  for k, v in keyboard[today]
-    IniWrite(v, "KMCounter.ini", today, k)
-  for k, v in keyboard["total"]
-    IniWrite(v, "KMCounter.ini", "total", k)
+  DllCall("UnhookWindowsHookEx", "Ptr", hHookMouse)
+  DllCall("UnhookWindowsHookEx", "Ptr", hHookKeyboard)
+  FreeTileBrushes()
+  if (!DemoMode)
+    SaveData()
 }
 
 HookMouse()
@@ -586,7 +286,7 @@ LowLevelMouseProc(nCode, wParam, lParam)
   }
   ; CallNextHookEx 让其它钩子可以继续处理消息
   ; 返回非0值 例如1 告诉系统此消息将丢弃
-  return, DllCall("CallNextHookEx", "Ptr", 0, "Int", nCode, "UInt", wParam, "UInt", lParam)
+  return, DllCall("CallNextHookEx", "Ptr", 0, "Int", nCode, "Ptr", wParam, "Ptr", lParam, "Ptr")
 }
 
 HookKeyboard()
@@ -611,7 +311,8 @@ LowLevelKeyboardProc(nCode, wParam, lParam)
     if (!keyboard[today].HasKey("sc" sc))                             ; 即使不在布局中的按键依然初始化，使其可被记录
     {
       keyboard[today,   "sc" sc] := 0
-      keyboard["total", "sc" sc] := 0
+      if (!keyboard.total.HasKey("sc" sc))
+        keyboard["total", "sc" sc] := 0
     }
       keyboard[today,   "sc" sc] += 1
     , keyboard["total", "sc" sc] += 1
@@ -620,29 +321,7 @@ LowLevelKeyboardProc(nCode, wParam, lParam)
   }
   ; CallNextHookEx 让其它钩子可以继续处理消息
   ; 返回非0值 例如1 告诉系统此消息将丢弃
-  return, DllCall("CallNextHookEx", "Ptr", 0, "Int", nCode, "UInt", wParam, "UInt", lParam)
-}
-
-getcolors(c1, c2, n)
-{
-  ; 限制 n 的范围
-  n := n>=2 ? n : 2
-  ; 生成渐变色
-  colors := []
-  r1 := c1 >> 16, g1 := c1 >> 8 & 0xFF, b1 := c1 & 0xFF
-  r2 := c2 >> 16, g2 := c2 >> 8 & 0xFF, b2 := c2 & 0xFF
-  ; (n-1) 与 (A_Index-1) 确保输出的首尾一定是 c1 和 c2
-    rd := (r2-r1)/(n-1)
-  , gd := (g2-g1)/(n-1)
-  , bd := (b2-b1)/(n-1)
-  loop, % n
-    ; 不需要对 rd gd bd 等进行舍除
-    ; 在这里利用 Format 进行位数限制，能更好的保留精度
-    colors[A_Index] := Format("{:02x}{:02x}{:02x}"
-    , r1+rd * (A_Index-1)
-    , g1+gd * (A_Index-1)
-    , b1+bd * (A_Index-1))
-  return, colors
+  return, DllCall("CallNextHookEx", "Ptr", 0, "Int", nCode, "Ptr", wParam, "Ptr", lParam, "Ptr")
 }
 
 countdown()
@@ -663,9 +342,10 @@ UpdateDeviceCaps(w:="", h:="")
   }
   else
   {                                                                         ; 没有传值过来则获取屏幕物理尺寸
-    hdcScreen     := DllCall("GetDC", "UPtr", 0)
+    hdcScreen     := DllCall("GetDC", "UPtr", 0, "Ptr")
     devicecaps.w  := DllCall("GetDeviceCaps", "UPtr", hdcScreen, "Int", 4)  ; 毫米
     devicecaps.h  := DllCall("GetDeviceCaps", "UPtr", hdcScreen, "Int", 6)  ; 毫米
+    DllCall("ReleaseDC", "Ptr", 0, "Ptr", hdcScreen)
   }
   devicecaps.size := (Sqrt(devicecaps.w**2 + devicecaps.h**2)/25.4)         ; 英寸 勾股求斜边
 }
@@ -682,7 +362,7 @@ UpdateLayout(lkw, lkh, lks, lkhs, lkvs)
 IniRead(Filename, Section:="", Key:="", Default:=""){
   IniRead, OutputVar, %Filename%, %Section%, %Key%, %Default%
   ; 不管是没找到键 亦或是 键值为空 都返回默认值
-  return, OutputVar="" ? Default : OutputVar
+  return, (OutputVar="" || OutputVar="ERROR") ? Default : OutputVar
 }
 IniWrite(Value, Filename, Section, Key:=""){
   IniWrite, %Value%, %Filename%, %Section%, %Key%
@@ -872,13 +552,13 @@ LoadControlList(layout:="")
                  , "sc82",  "sc83"]
 
   ; Color 没有 0x 前缀。背景色影响 GUI 信息框 当日按键数据太少时的按键。不影响数据量足够后的按键。
-  list.Opt := {Font:"comic sans ms", FontSize:9, BackgroundColor:"EEEEEE", TextColor:"575757"}
+  list.Opt := {Font:"Segoe UI", FontSize:9, BackgroundColor:"101A2B", TextColor:"DAE9F5"}
 
   return, list
 }
 
 MultiLanguage:
-  if (A_Language="0804")
+  if (AppLanguage != "en")
   {
     L_menu_统计:="统计"
     L_menu_设置:="设置"
@@ -904,7 +584,7 @@ MultiLanguage:
 
     L_gui2_设置:="设置"
     L_gui2_历史数据:="历史数据"
-    L_gui2_sub1:="设置历史数据保留时长。"
+    L_gui2_sub1:="主文件保留天数；更早明细按年归档。"
     L_gui2_存储:="存储"
     L_gui2_天:="天"
     L_gui2_屏幕尺寸:="屏幕尺寸"
@@ -929,7 +609,7 @@ MultiLanguage:
   else
   {
     L_menu_统计:="Statistics"
-    L_menu_设置:="Setting"
+    L_menu_设置:="Settings"
     L_menu_开机启动:="Start-Up"
     L_menu_布局定制:="Custom Layout"
     L_menu_退出:="Exit"
@@ -950,9 +630,9 @@ MultiLanguage:
     L_gui1_寸:="inch"
     L_gui1_msgbox:="The number of keystrokes is too low, keyboard heatmap not generated yet."
 
-    L_gui2_设置:="Setting"
+    L_gui2_设置:="Settings"
     L_gui2_历史数据:="History"
-    L_gui2_sub1:="Set the storage time of history data."
+    L_gui2_sub1:="Active days; older data is archived by year."
     L_gui2_存储:="Storage"
     L_gui2_天:="days"
     L_gui2_屏幕尺寸:="Monitor"
@@ -976,8 +656,7 @@ MultiLanguage:
   }
 return
 
-#Include <OSDTIP>
-#Include <ImagePut>
-#Include <Class_CtlColors>
-#Include <Class_ImageButton>
-#Include <UseGDIP>
+
+#Include %A_ScriptDir%\tests\SelfTest.ahk
+
+#Include %A_ScriptDir%\tests\DesignPreview.ahk
