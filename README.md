@@ -40,11 +40,13 @@ A compact Windows keyboard and mouse heatmap with logarithmic intensity, one-cli
 
 ## 开始使用
 
-1. 从 [Releases](https://github.com/zhangh8976/KMCounter/releases) 下载 `KMCounter.exe`，放到一个可写目录。
-2. 双击 exe，打开主界面并开始统计，无需另外安装 AutoHotkey。
+1. 从 [Releases](https://github.com/zhangh8976/KMCounter/releases) 下载 `KMCounter-v4.2.3-win-x64.zip` 便携包，完整解压到一个可写目录；也可以仅下载 `KMCounter.exe`。
+2. 双击解压后的 exe，打开主界面并开始统计，无需另外安装 AutoHotkey。
 3. 点击左上角齿轮调整设置；关闭窗口后继续在托盘运行，从托盘选择“退出”保存并结束。
 
 数据保存在 exe 同目录的 `KMCounter.ini` 和 `history/` 中。升级时先退出旧版，再替换 exe，保留这两个位置即可延续数据。
+
+便携包仅包含程序、使用说明和校验文件，不含个人统计或配置，可以直接转发。请先解压，不要在 ZIP 内直接运行。
 
 `--background` 仅启动托盘；`--demo` 使用合成数据展示界面，不记录输入、不写入个人统计。
 
